@@ -77,6 +77,7 @@ static void test_l1_coherency(void) {
 static void test_inclusive_dirty_l2_eviction(void) {
 	uint64_t victim_addr = 0x8000ULL + 5ULL;
 	uint64_t conflict_addrs[4];
+	cache_stats_t l2_stats;
 	int i;
 
 	seed_line(victim_addr, 0x10U);
@@ -94,9 +95,39 @@ static void test_inclusive_dirty_l2_eviction(void) {
 		(void)read_cache(conflict_addrs[i], DATA);
 	}
 
+	l2_stats = get_l2_stats();
 	expect(get_l2_cache_line(victim_addr) == NULL, "victim line should be evicted from L2");
 	expect(get_l1_instr_cache_line(victim_addr) == NULL, "L2 eviction should invalidate the inclusive L1-I copy");
+	expect(l2_stats.accesses == 6 && l2_stats.misses == 5, "dirty L1-I backinvalidation should add one L2 access");
 	expect(read_memory(victim_addr) == 0xEEU, "dirty L1-I data should reach memory on L2 eviction");
+}
+
+static void test_backinvalidate_dirty_l1_data(void) {
+	uint64_t victim_addr = 0x18000ULL + 9ULL;
+	uint64_t conflict_addrs[4];
+	cache_stats_t l2_stats;
+	int i;
+
+	seed_line(victim_addr, 0x22U);
+	for (i = 0; i < 4; i++) {
+		conflict_addrs[i] = victim_addr + ((uint64_t)(i + 1) * SAME_L2_SET_STRIDE);
+		seed_line(conflict_addrs[i], (uint8_t)(0x70U + (uint8_t)(i * 0x10U)));
+	}
+
+	init_cache(LRU);
+
+	expect(read_cache(victim_addr, DATA) == 0x2BU, "victim data line should be loaded into L1-D");
+	write_cache(victim_addr, 0xC3U, DATA);
+
+	for (i = 0; i < 4; i++) {
+		(void)read_cache(conflict_addrs[i], INSTR);
+	}
+
+	l2_stats = get_l2_stats();
+	expect(get_l2_cache_line(victim_addr) == NULL, "dirty L1-D victim should be evicted from L2");
+	expect(get_l1_data_cache_line(victim_addr) == NULL, "L2 eviction should invalidate the inclusive L1-D copy");
+	expect(l2_stats.accesses == 6 && l2_stats.misses == 5, "dirty L1-D backinvalidation should add one L2 access");
+	expect(read_memory(victim_addr) == 0xC3U, "dirty L1-D data should reach memory on L2 eviction");
 }
 
 static uint64_t run_policy_workload(replacement_policy_e policy) {
@@ -132,6 +163,7 @@ int main(int argc, char *argv[]) {
 	test_basic_data_hits();
 	test_l1_coherency();
 	test_inclusive_dirty_l2_eviction();
+	test_backinvalidate_dirty_l1_data();
 
 	lru_misses = run_policy_workload(LRU);
 	random_misses = run_policy_workload(RANDOM);

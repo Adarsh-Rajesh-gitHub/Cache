@@ -225,16 +225,9 @@ static void evict_l2_line(uint64_t set_index, int way) {
 	inst_line = find_l1_instr_line_internal(evicted_addr);
 	data_line = find_l1_data_line_internal(evicted_addr);
 
-	if (inst_line != NULL && inst_line->modified) {
-		memcpy(line->data, inst_line->data, sizeof(line->data));
-		line->modified = 1;
-		inst_line->modified = 0;
-	}
-	if (data_line != NULL && data_line->modified) {
-		memcpy(line->data, data_line->data, sizeof(line->data));
-		line->modified = 1;
-		data_line->modified = 0;
-	}
+	// Back-invalidating a dirty L1 copy still counts as an L1 writeback into L2.
+	write_back_l1_line_to_l2(inst_line, evicted_addr);
+	write_back_l1_line_to_l2(data_line, evicted_addr);
 
 	if (line->modified) {
 		write_line_to_memory(line, evicted_addr);
