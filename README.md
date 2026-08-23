@@ -4,6 +4,8 @@ Name: Adarsh Rajesh
 
 EID: ar77947
 
+See [Adarsh's portfolio](https://adarshrajesh.com/) for project context and related work.
+
 ## Build And Run
 
 Recommended starter-code build:
